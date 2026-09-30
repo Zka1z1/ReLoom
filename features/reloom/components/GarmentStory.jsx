@@ -7,19 +7,19 @@ export default function GarmentStory({ model }) {
         <div className="designerbooth-3">
         <div className="header-title">
         <div className="garmentstory-3">{story.name}</div>
-        <div className="messageboard-5">{String(story.designer) + " \u00b7 " + String(story.price) + " \u00b7 " + String(story.zone)}</div>
+        <div className="messageboard-5">{story.donated?`${story.condition} · size ${story.size} · Awaiting a maker`:`${story.designer} · ${story.price} · ${story.zone}`}</div>
         </div>
         <div className="garmentstory-4"><button className="garmentstory-5" onClick={shareStory} type="button">{"Share"}</button><button className="donation-5" onClick={closeModal} type="button">{"\u2715"}</button></div>
         </div>
-        <div className="garmentstory-6">
-        <div>
+        <div className="garmentstory-6">{model.canDesignStory&&<button type="button" className="nfc-items-entry" onClick={model.storyNfc}>✦ Design an NFC strap for this story</button>}
+        {!story.donated&&<div>
         <div className="myitems-6">{"before / after"}</div>
         <div className="garmentstory-7">
         <div className="rl-x garmentstory-8"><span className="garmentstory-9">{"before"}</span></div>
         <div className="garmentstory-10">{"\u2192"}</div>
         <div className="rl-x garmentstory-11"><span className="garmentstory-12">{"after"}</span></div>
         </div>
-        </div>
+        </div>}
         <div className="garmentstory-13">
         <div className="garmentstory-14">{"1"}</div>
         <div className="donation-22">
@@ -30,7 +30,7 @@ export default function GarmentStory({ model }) {
         </div>
         </div>
         </div>
-        <div className="garmentstory-13">
+        {!story.donated&&<><div className="garmentstory-13">
         <div className="garmentstory-14">{"2"}</div>
         <div className="donation-22">
         <div className="myitems-20">{"Maker's process"}</div>
@@ -61,8 +61,9 @@ export default function GarmentStory({ model }) {
         <div className="garmentstory-27">{String(story.split) + " of the sale goes to "}<strong>{story.charity}</strong>{"."}</div>
         </div>
         </div>
+        </>}
         <div className="search-3">
-        <button className="garmentstory-28" style={{ "background": modalCartBg }} onClick={modalCart} type="button">{modalCartCta}</button>
+        {!story.donated&&<button className="garmentstory-28" style={{ "background": modalCartBg }} onClick={modalCart} type="button">{modalCartCta}</button>}
         <button className="garmentstory-29" onClick={openBoard} type="button">{"Leave a message"}</button>
         </div>
         </div>

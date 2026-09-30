@@ -1,84 +1,75 @@
-import React from "react";
+import React, { useRef, useState } from 'react';
+import { swipeStep } from '../showroom.js';
+
 export default function Showroom({ model }) {
-    const { addToCart, cartBg, cartColor, cartLabel, dotRef, floorRef, focusHeart, focusIsGarment, focusKicker, focusName, focusOpen, focusStar, focusVotes, isStore, joyDown, joyMove, joyRef, joyUp, knobRef, onDown, onMove, onUp, saveFocus, sprites, viewRef, voteFocus, walls, worldRef, zoneJumps } = model;
-    return (<> {Boolean(isStore) && <> 
-        <div className="showroom-viewport" ref={viewRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-        <div className="showroom-world" ref={worldRef}>
-        <div className="showroom-floor" ref={floorRef}></div>
-            {walls.map((w, index2) => <React.Fragment key={w.id ?? w.label ?? w.name ?? index2}>
-            <div className="showroom-wall" ref={w.ref}></div>
-            </React.Fragment>)}
-            {sprites.map((s, index3) => <React.Fragment key={s.id ?? s.label ?? s.name ?? index3}>
-            <div className="showroom-sprite" style={{ "cursor": s.cursor }} ref={s.ref} onClick={s.tap}>
-                {Boolean(s.isSign) && <> 
-                <div className="showroom-6">
-                <div className="showroom-7">{s.name}</div>
-                </div>
- </>}
-                {Boolean(s.isBooth) && <> 
-                <div className="showroom-8">
-                <div className="showroom-9">
-                <div className="rl-x showroom-10"></div>
-                <div className="showroom-11">
-                <div className="showroom-12">{s.name}</div>
-                <div className="showroom-13">{s.sub}</div>
-                </div>
-                </div>
-                <div className="rl-x showroom-14"></div>
-                <div className="showroom-15">
-                <div className="showroom-16">{"work in progress"}</div>
-                <div className="showroom-17">{s.wip}</div>
-                <div className="showroom-18"><div className="showroom-19" style={{ "width": String(s.progress) + "%" }}></div></div>
-                </div>
-                </div>
- </>}
-                {Boolean(s.isFigure) && <> 
-                <div className="showroom-20" style={{ "color": s.kickerColor }}>{s.kicker}</div>
-                <div className="rl-x showroom-21">
-                <span className="showroom-22">{s.figure}</span>
-                    {Boolean(s.hasPosts) && <> 
-                    <button className="showroom-23" onClick={s.postTap} type="button">{s.postsLabel}</button>
- </>}
-                </div>
-                <div className="showroom-24">
-                <div className="showroom-25">{s.priceLabel}</div>
-                </div>
- </>}
-            </div>
-            </React.Fragment>)}
-        </div>
-        <div className="showroom-26">
-            {zoneJumps.map((z, index4) => <React.Fragment key={z.id ?? z.label ?? z.name ?? index4}>
-            <button className="showroom-27" onClick={z.go} type="button">{z.label}</button>
-            </React.Fragment>)}
-        </div>
-        <div className="showroom-28">
-        <span className="showroom-29">{"map"}</span>
-        <span className="showroom-30">{"top voted"}</span>
-        <span className="showroom-31">{"booths"}</span>
-        <span className="showroom-32">{"new"}</span>
-        <div className="showroom-33" ref={dotRef}></div>
-        </div>
-        <div className="showroom-34" ref={joyRef} onPointerDown={joyDown} onPointerMove={joyMove} onPointerUp={joyUp} onPointerCancel={joyUp}>
-        <span className="showroom-35">{"\u25b2"}</span>
-        <span className="showroom-36">{"\u25bc"}</span>
-        <span className="showroom-37">{"\u25c0"}</span>
-        <span className="showroom-38">{"\u25b6"}</span>
-        <div className="showroom-39" ref={knobRef}></div>
-        </div>
-            {Boolean(focusName) && <> 
-            <div className="showroom-40">
-            <div className="showroom-41">{focusKicker}</div>
-            <button className="showroom-42" onClick={focusOpen} type="button">{focusName}</button>
-                {Boolean(focusIsGarment) && <> 
-                <div className="showroom-43">
-                <button className="showroom-44" style={{ "background": cartBg, "color": cartColor }} onClick={addToCart} type="button">{cartLabel}</button>
-                <button className="showroom-45" style={{ "border": "1.5px solid " + String(focusHeart.border), "background": focusHeart.bg, "color": focusHeart.color }} onClick={voteFocus} type="button"><span style={{ "animation": focusHeart.pop }}>{"\u2665"}</span>{focusVotes}</button>
-                <button className="showroom-46" style={{ "border": "1.5px solid " + String(focusStar.border), "background": focusStar.bg, "color": focusStar.color }} onClick={saveFocus} type="button">{focusStar.icon}</button>
-                </div>
- </>}
-            </div>
- </>}
-        </div>
- </>} </>);
+  const [direction,setDirection] = useState(1);
+  const gesture = useRef(null);
+  const suppressClickUntil = useRef(0);
+  if (!model.isStore) return null;
+  const room = model.showroom;
+  const move = step => {if((step<0&&!room.canPrev)||(step>0&&!room.canNext))return;setDirection(step);room.move(step);};
+  const startSwipe = e => {
+    if (!e.isPrimary || e.button !== 0 || e.target.closest('input, select, textarea')) return;
+    gesture.current = {x: e.clientX, y: e.clientY, id: e.pointerId};
+  };
+  const finishSwipe = e => {
+    const start = gesture.current;
+    gesture.current = null;
+    if (!start || start.id !== e.pointerId) return;
+    const step = swipeStep(e.clientX - start.x, e.clientY - start.y);
+    if (step) { suppressClickUntil.current = performance.now() + 350; move(step); }
+  };
+  return <section className="zone-showroom" aria-label="Virtual showroom" onKeyDown={e => {
+    if (e.target.closest('input,select,textarea') || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); move(e.key === 'ArrowLeft' ? -1 : 1); }
+  }}>
+    <header className="zone-heading spatial-toolbar">
+      <h1 className="zone-area-title">{room.label}</h1>
+      <div className="zone-search-row">
+        <label className="zone-search"><span className="sr-only">{room.search}</span><span aria-hidden="true">⌕</span>
+          <input id="showroom-search" type="search" value={room.filters.query} placeholder={room.search} onChange={e => room.setFilters({query:e.target.value})} />
+        </label>
+        <button className="zone-filter-toggle" type="button" aria-expanded={room.filters.expanded} aria-controls="zone-filters" onClick={() => room.setFilters({expanded: !room.filters.expanded})}>Filters{room.activeFilters.length > 0 && <span aria-label="Active filters"> •</span>}</button>
+      </div>
+      {room.filters.expanded && <div className="zone-filters" id="zone-filters">
+        {room.groups.map(group => <label key={group.key}>{group.label}<select value={room.filters[group.key]} onChange={e => room.setFilters({[group.key]:e.target.value})}>
+          {group.options.map(option => <option key={option}>{option}</option>)}
+        </select></label>)}
+      </div>}
+      <div className="zone-results-meta" role="status"><span className="sr-only">{room.label}: {room.countLabel}</span>
+        {(room.filters.query || room.activeFilters.length > 0) && <button type="button" onClick={room.reset}>Clear all</button>}
+      </div>
+      {!room.filters.expanded && room.activeFilters.length > 0 && <p className="zone-active-filters">{room.activeFilters.map(group => room.filters[group.key]).join(' · ')}</p>}
+    </header>
+    <div className="zone-body">
+      <button type="button" className="zone-arrow zone-arrow-left" aria-label="Previous area" disabled={!room.canPrev} onClick={()=>move(-1)}>‹</button>
+      <div key={room.id} className={`zone-scroll zone-perspective ${direction>0?'turn-next':'turn-prev'}`} role="region" aria-label={room.label} tabIndex={0}
+        onPointerDown={startSwipe}
+        onPointerMove={e => { const start=gesture.current; if(start && start.id === e.pointerId && Math.abs(e.clientX-start.x)>12 && Math.abs(e.clientX-start.x)>Math.abs(e.clientY-start.y)*1.4) e.currentTarget.setPointerCapture?.(e.pointerId); }}
+        onPointerUp={finishSwipe} onPointerCancel={() => {gesture.current=null;}}
+        onLostPointerCapture={() => {gesture.current=null;}}
+        onClickCapture={e => {if(performance.now()<suppressClickUntil.current){e.preventDefault();e.stopPropagation();}}}>
+        {room.items.length === 0 && <div className="zone-empty"><h2>No matches here</h2><p>Try another search or clear the filters for this area.</p><button type="button" onClick={room.reset}>Clear search &amp; filters</button></div>}
+        {room.items.map(item => <article key={item.id} className={`zone-card zone-card-${room.id}`}>
+          {room.id === 'designers' ? <>
+            <div className="zone-card-heading"><span className="zone-avatar" aria-hidden="true">{item.designer.slice(1,2)}</span><div><h2>{item.designer}</h2><p>{item.bio}</p></div></div>
+            <div className="zone-card-label">{item.category} · {item.pieces.length} pieces</div>
+            <div className="zone-work"><span className="zone-eyebrow">Work in progress</span><p>{item.wip}</p><progress aria-label={`${item.designer} work progress`} value={item.progress} max="100"/><div className="zone-progress-caption"><span>{item.progress}% complete</span><span>{item.eta}</span></div></div>
+            <button type="button" className="zone-card-primary" onClick={item.open}>Visit booth</button>
+          </> : room.id === 'donated' ? <>
+            <div className="zone-card-label">{item.when} · Waiting for a maker</div>
+            <h2>{item.name}</h2><p className="zone-material">{item.material}</p>
+            <dl className="zone-garment-facts"><div><dt>Condition</dt><dd>{item.condition}</dd></div><div><dt>Size</dt><dd>{item.size}</dd></div></dl>
+            <p className="zone-donor-note">“{item.note}”</p><p className="zone-donor">Passed on by {item.donor}</p><p className="zone-drop">Drop-off: {item.drop}</p>
+          </> : <>
+            <button type="button" className="zone-piece-open" onClick={item.open}><div className="rl-x zone-piece-placeholder" aria-hidden="true"><span>{item.cat}</span></div><span className="zone-piece-name">{item.name}</span></button>
+            <div className="zone-piece-meta"><span>{item.designer}</span><strong>${item.price}</strong></div>
+            <div className="zone-piece-actions"><button type="button" onClick={item.vote} aria-label={`Vote for ${item.name}`} aria-pressed={item.voted}>♥ {item.votes}</button><button type="button" onClick={item.save} aria-pressed={item.saved} aria-label={`${item.saved ? 'Unsave' : 'Save'} ${item.name}`}>{item.saved ? '★ Saved' : '☆ Save'}</button><button type="button" onClick={item.addCart} aria-label={`Add ${item.name} to cart`}>{item.inCart ? 'In cart' : '＋ Cart'}</button></div>
+          </>}
+        </article>)}
+      </div>
+      <button type="button" className="zone-arrow zone-arrow-right" aria-label="Next area" disabled={!room.canNext} onClick={()=>move(1)}>›</button>
+    </div>
+    <footer className="zone-footer"><span>Swipe to explore</span><div aria-label="Current area">{room.zones.map(zone => <span key={zone.id} className={zone.active ? 'active' : ''} aria-hidden="true" />)}</div></footer>
+  </section>;
 }

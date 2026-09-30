@@ -1,107 +1,82 @@
 "use client";
 import React from "react";
-import { ITEMS, WALLS, ROOM, SHOWROOM_SCALE, NODES } from "./data.js";
-import { castVote, findGarment, voteCount, garmentPosts } from "./domain.js";
+import { NODES } from "./data.js";
+import { findGarment, voteCount, garmentPosts } from "./domain.js";
 import { createViewModel } from "./view-model.js";
+import { ZONES, EMPTY_FILTERS, DONATIONS } from "./showroom.js";
+import { DEFAULT_DESIGN, readDesigns, DESIGN_STORAGE_KEY, participatingGarments, canBindStory } from "./nfc.js";
+import {SEED_TAG} from './records.js';
+import {requestRecords,loadSharedGarment} from './api.js';
 import AppView from "./components/AppView.jsx";
 export default class ReLoomApp extends React.Component {
     state = {
-        screen: "store", dialog: true, node: "welcome", typedLen: 0, typing: true,
-        points: 120, votes: {}, voted: {}, saved: {}, cart: [], toast: null, focus: null,
-        search: false, query: "", cat: "All", sort: "Most voted", price: "Any",
+        nfcDesign: {...DEFAULT_DESIGN,emojis:[...DEFAULT_DESIGN.emojis]}, nfcDesigns:{}, legacyDesigns:{}, nfcSaved:false, nfcError:"", nfcReturn:"store", dataReady:false, dataError:"", saving:false, sharedGarments:[],
+        showroomZone: 0, showroomFilters: Object.fromEntries(ZONES.map(z => [z.id, {...EMPTY_FILTERS}])), donations: DONATIONS,
+        screen: "store", dialog: false, node: "welcome", typedLen: 0, typing: true,
+        points: 120, votes: {}, voted: {}, saved: {}, cart: [], toast: null,
         modal: null, boardGarment: null, draft: "", attachment: null, replyTarget: null, posts: {}, seen: {}, booth: null,
         donateStep: 1, donateChat: "photo", photos: false, condition: null, size: null, desc: "", drop: null,
-        tags: [{ id: "#PS-1180", name: "Patchwork Cargo Skirt", meta: "good · size S", status: "upcycled · rehomed", dot: "var(--color-neutral-500)", boardLabel: "5 posts", firstMessage: "Note fromthe last wearer: good · size S" }],
-        newTag: null, tagSaved: false, itemsTab: "donated"
+        tags: [SEED_TAG], newTag: null, shareId:null, itemsTab: "donated"
     };
-    constructor(props) {
-        super(props);
-        this.cam = { x: 0, z: -180, yaw: 0 };
-        this.joy = { x: 0, y: 0 };
-        this.els = {};
-        this.wallEls = {};
-        this.drag = null;
-        this.joyActive = false;
-    }
-    componentDidMount() { this.loop(); this.type(); }
-    componentDidUpdate(previousProps, previousState) {
-        if (previousState.screen !== this.state.screen) {
-            cancelAnimationFrame(this.raf);
-            this.lastFrame = null;
-            this.lastCamera = null;
-            if (this.state.screen === "store")
-                this.loop();
-        }
-    }
-    componentWillUnmount() { cancelAnimationFrame(this.raf); clearInterval(this.t); clearTimeout(this.tt); }
-    loop = (timestamp = performance.now()) => {
-        if (this.state.screen !== "store")
-            return;
-        const elapsed = this.lastFrame == null ? 1 : Math.min((timestamp - this.lastFrame) / (1000 / 60), 2);
-        this.lastFrame = timestamp;
-        const c = this.cam, j = this.joy, speed = (this.props.walkSpeed ?? 8) * elapsed;
-        const rad = c.yaw * Math.PI / 180;
-        const fx = Math.sin(rad), fz = -Math.cos(rad);
-        if (j.y) {
-            c.x += fx * speed * -j.y;
-            c.z += fz * speed * -j.y;
-        }
-        if (j.x) {
-            c.x += -fz * speed * 0.85 * j.x;
-            c.z += fx * speed * 0.85 * j.x;
-        }
-        c.x = Math.max(ROOM.minX, Math.min(ROOM.maxX, c.x));
-        c.z = Math.max(ROOM.minZ, Math.min(ROOM.maxZ, c.z));
-        const cameraKey = `${c.x},${c.z},${c.yaw}`;
-        if (cameraKey === this.lastCamera) {
-            this.raf = requestAnimationFrame(this.loop);
-            return;
-        }
-        this.lastCamera = cameraKey;
-        if (this.world)
-            this.world.style.transform = "scale(" + SHOWROOM_SCALE + ") rotateY(" + c.yaw + "deg) translate3d(" + (-c.x) + "px, 250px, " + (-c.z) + "px)";
-        if (this.floor)
-            this.floor.style.transform = "rotateX(90deg)";
-        WALLS.forEach(w => {
-            const el = this.wallEls[w.id];
-            if (!el)
-                return;
-            el.style.width = w.w + "px";
-            el.style.height = w.h + "px";
-            el.style.marginLeft = (-w.w / 2) + "px";
-            el.style.marginTop = (-w.h) + "px";
-            el.style.transform = "translate3d(" + w.x + "px, 0px, " + w.z + "px) rotateY(" + w.rot + "deg)";
-        });
-        let best = null, bestD = 560;
-        ITEMS.forEach(it => {
-            const el = this.els[it.id];
-            const dx = it.x - this.cam.x, dz = it.z - this.cam.z;
-            const along = dx * fx + dz * fz;
-            const d = Math.sqrt(dx * dx + dz * dz);
-            if (el) {
-                el.style.width = it.w + "px";
-                el.style.height = it.h + "px";
-                el.style.marginLeft = (-it.w / 2) + "px";
-                el.style.marginTop = (-(it.h + (it.y || 0))) + "px";
-                el.style.transform = "translate3d(" + it.x + "px, 0px, " + it.z + "px) rotateY(" + (it.kind === "sign" ? (it.rot || 0) : -c.yaw) + "deg)";
-                el.style.visibility = along < 120 ? "hidden" : "visible";
-                el.style.opacity = d > 1250 ? "0.6" : "1";
+    async componentDidMount() {
+        const initialize=async()=>{
+            await this.refreshRecords();
+            let legacy={};try{legacy=readDesigns(window.localStorage);}catch{}
+            this.setState({legacyDesigns:legacy});
+            if(this.state.dataReady&&Object.keys(legacy).length) {
+                const saved=await this.persist({type:'import',value:legacy});
+                if(saved)this.cleanLegacy();
             }
-            if (it.kind !== "sign" && d < bestD && (along / (d || 1)) > 0.1) {
-                bestD = d;
-                best = it.id;
-            }
-        });
-        if (best !== this.state.focus)
-            this.setState({ focus: best });
-        if (this.dot) {
-            this.dot.style.left = ((c.x - ROOM.minX) / (ROOM.maxX - ROOM.minX) * 100) + "%";
-            this.dot.style.top = ((c.z - ROOM.minZ) / (ROOM.maxZ - ROOM.minZ) * 100) + "%";
+        };
+        if(navigator.locks)await navigator.locks.request('reloom-initialize',initialize);else await initialize();
+        const storyId=new URLSearchParams(window.location.search).get('story');
+        if(storyId)await this.openStory(storyId);
+        this.onFocus=()=>this.refreshRecords();
+        window.addEventListener('focus',this.onFocus);
+        if(typeof BroadcastChannel!=='undefined'){
+            this.channel=new BroadcastChannel('reloom-records');
+            this.channel.onmessage=()=>this.refreshRecords();
         }
-        this.raf = requestAnimationFrame(this.loop);
-    };
+        if (this.state.dialog) this.type();
+    }
+    cleanLegacy() {
+        const remaining=Object.fromEntries(Object.entries(this.state.legacyDesigns).filter(([id])=>!this.state.nfcDesigns[id]));
+        this.setState({legacyDesigns:remaining});
+        try{if(Object.keys(remaining).length)window.localStorage.setItem(DESIGN_STORAGE_KEY,JSON.stringify(remaining));else window.localStorage.removeItem(DESIGN_STORAGE_KEY);}catch{}
+    }
+    request=action=>requestRecords(action);
+    enqueue(work) {const next=(this.pending||Promise.resolve()).then(work);this.pending=next.catch(()=>{});return next;}
+    applyRecords(records) {
+        const {ownedDonations,sharedGarments=[],...data}=records;
+        return new Promise(resolve=>this.setState(s=>({...data,sharedGarments:[...new Map([...s.sharedGarments,...sharedGarments].map(g=>[g.id,g])).values()],donations:[...ownedDonations,...DONATIONS],dataReady:true,dataError:''}),resolve));
+    }
+    refreshRecords() {
+        return this.enqueue(async()=>{try{await this.applyRecords(await this.request());return true;}catch(error){this.setState({dataError:error.message});return false;}});
+    }
+    persist(action) {
+        if(!this.state.dataReady){this.toast('Your items are still loading. Please retry.');return Promise.resolve(false);}
+        return this.enqueue(async()=>{
+            this.setState({saving:true});
+            try{await this.applyRecords(await this.request(action));if(action.type==='design')this.cleanLegacy();this.channel?.postMessage('updated');return true;}
+            catch(error){this.setState({dataError:error.message});return false;}
+            finally{this.setState({saving:false});}
+        });
+    }
+    openNfc(id) {
+        if(id&&!canBindStory(this.state,id))return this.toast('Only stories you have participated in can be linked.');
+        const available=participatingGarments(this.state);
+        const garmentId=id||(canBindStory(this.state,this.state.nfcDesign.garmentId)?this.state.nfcDesign.garmentId:available[0]?.id)||'';
+        const saved=this.state.nfcDesigns[garmentId]||this.state.legacyDesigns[garmentId];
+        this.setState({screen:'nfc',modal:null,booth:null,dialog:false,
+            nfcReturn:this.state.screen==='nfc'?this.state.nfcReturn:this.state.screen,
+            nfcDesign:saved?{...saved,emojis:[...saved.emojis]}:{...DEFAULT_DESIGN,emojis:[...DEFAULT_DESIGN.emojis],garmentId},nfcSaved:!!saved,nfcError:''});
+    }
+    componentWillUnmount() { clearInterval(this.t); clearTimeout(this.tt); window.removeEventListener('focus',this.onFocus); this.channel?.close(); }
+    changeZone(index) {
+        if (index < 0 || index >= ZONES.length) return;
+        this.setState({showroomZone: index, screen: 'store', dialog: false});
+    }
     toast(msg) { clearTimeout(this.tt); this.setState({ toast: msg }); this.tt = setTimeout(() => this.setState({ toast: null }), 1700); }
-    award(n, msg) { this.setState(s => ({ points: s.points + n })); this.toast(msg + " +" + n + " pts"); }
     type() {
         clearInterval(this.t);
         const full = NODES[this.state.node].text.length;
@@ -115,14 +90,13 @@ export default class ReLoomApp extends React.Component {
         }), 16);
     }
     node(id) { this.setState({ dialog: true, node: id }, () => this.type()); }
-    walkTo(x, z, yaw) { this.cam.x = x; this.cam.z = z; this.cam.yaw = yaw; this.setState({ dialog: false, screen: "store" }); }
-    item(id) { return findGarment(id); }
+    item(id) { return findGarment(id,[...this.state.donations,...this.state.sharedGarments]); }
     count(id) { return voteCount(id, this.state.votes); }
     postsFor(id) { return garmentPosts(id, this.state.posts); }
-    vote(id) {
-        if (this.state.voted[id])
-            return this.toast("Already voted");
-        this.setState(state => castVote(state, id), () => this.toast("Vote counted +5 pts"));
+    async vote(id) {
+        if(!findGarment(id))return;
+        if(this.state.voted[id])return this.toast('Already voted');
+        if(await this.persist({type:'vote',id}))this.toast('Vote counted');
     }
     toggleSave(id) {
         this.setState(s => {
@@ -133,7 +107,7 @@ export default class ReLoomApp extends React.Component {
             }
             saved[id] = true;
             return { saved };
-        }, () => this.toast(this.state.saved[id] ? "Saved to My items" : "Removed from My items"));
+        }, () => this.toast(this.state.saved[id] ? "Saved to Items" : "Removed from Items"));
     }
     addCart(id) {
         if (!findGarment(id))
@@ -142,32 +116,17 @@ export default class ReLoomApp extends React.Component {
             return this.toast("Already in cart");
         this.setState(s => ({ cart: [...s.cart, id] }), () => this.toast("Added to cart"));
     }
-    openStory(id) { this.setState({ modal: id, booth: null, search: false, seen: Object.assign({}, this.state.seen, { [id]: true }) }); }
-    interact(id) {
-        const it = ITEMS.filter(i => i.id === id)[0];
-        if (!it)
-            return;
-        if (it.kind === "sign")
-            return;
-        if (it.kind === "booth")
-            return this.setState({ booth: id, search: false });
-        this.openStory(id);
+    async openStory(id) {
+        if(!this.item(id)) {
+            try{const garment=await loadSharedGarment(id);this.setState(s=>({sharedGarments:[...s.sharedGarments.filter(g=>g.id!==id),garment]}));}
+            catch(error){this.toast(error.message);return;}
+        }
+        this.setState({modal:id,booth:null,seen:{...this.state.seen,[id]:true}});
     }
     chip(active) {
         return active
             ? { border: "var(--color-text)", bg: "var(--color-text)", color: "var(--color-neutral-100)" }
             : { border: "var(--color-neutral-400)", bg: "var(--color-neutral-100)", color: "var(--color-text)" };
-    }
-    qrEl() {
-        const n = 21, cells = [];
-        for (let y = 0; y < n; y++)
-            for (let x = 0; x < n; x++) {
-                const quiet = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13);
-                const eye = quiet && (x % 6 === 0 || y % 6 === 0 || (x > 1 && x < 5 && y > 1 && y < 5) || (x > 15 && x < 19 && y > 1 && y < 5) || (x > 1 && x < 5 && y > 15 && y < 19));
-                const on = quiet ? eye : ((x * 7 + y * 13 + ((x * y) % 5)) % 3 === 0);
-                cells.push(React.createElement("span", { key: x + "-" + y, style: { background: on ? "var(--color-text)" : "transparent" } }));
-            }
-        return React.createElement("div", { style: { width: 86, height: 86, flex: "none", display: "grid", gridTemplateColumns: "repeat(21,1fr)", gridTemplateRows: "repeat(21,1fr)", border: "1.5px solid var(--color-text)", padding: 4 } }, cells);
     }
     render() { return <AppView model={createViewModel(this)}/>; }
 }

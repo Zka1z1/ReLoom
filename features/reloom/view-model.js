@@ -1,124 +1,29 @@
-import { selectGarments } from "./domain.js";
-import { CATALOG, BOOTHS, ITEMS, WALLS, SPOT, STORIES, DEFAULT_STORY, CONDITIONS, SIZES, DROPS, NODES } from "./data.js";
+import { createNfcModel, canBindStory, STRAP_COLORS, validateDesign, storyUrl } from "./nfc.js";
+import { createShowroomModel } from "./showroom.js";
+import { CATALOG, BOOTHS, STORIES, DEFAULT_STORY, CONDITIONS, SIZES, DROPS, NODES } from "./data.js";
 export function createViewModel(self) {
     const s = self.state;
     const node = NODES[s.node];
-    const focusItem = ITEMS.filter(i => i.id === s.focus)[0];
-    const focusG = focusItem && focusItem.kind === "garment" ? self.item(focusItem.id) : null;
-    const boothData = BOOTHS.filter(b => b.id === (s.booth || (focusItem && focusItem.kind === "booth" ? focusItem.id : null)))[0] || BOOTHS[0];
+    const boothData = BOOTHS.find(b => b.id === s.booth) || BOOTHS[0];
     const mg = self.item(s.modal) || CATALOG[0];
-    const story = Object.assign({}, STORIES[s.modal] || DEFAULT_STORY, { name: mg.name, designer: mg.designer, price: "$" + mg.price, zone: mg.zone, votes: self.count(mg.id) });
+    const story = mg.kind==='donation' ? {...mg,donated:true,donorNote:mg.note,steps:[]} : {...(STORIES[mg.id]||DEFAULT_STORY),name:mg.name,designer:mg.designer,price:'$'+mg.price,zone:mg.zone,votes:self.count(mg.id)};
     const boardGarment = self.item(s.boardGarment) || mg;
-    const results = selectGarments(s);
-    const q = s.query.trim().toLowerCase();
-    const designerHits = q ? BOOTHS.filter(b => b.designer.toLowerCase().indexOf(q) >= 0) : [];
     const cartItems = s.cart.map(id => self.item(id)).filter(Boolean);
     const cartTotal = cartItems.reduce((a, g) => a + g.price, 0);
     const savedIds = Object.keys(s.saved);
     const boardList = self.postsFor(boardGarment.id);
-    const unread = ITEMS.filter(i => i.kind === "garment" && !s.seen[i.id]).length;
-    const heart = id => {
-        const on = !!s.voted[id];
-        return { border: on ? "var(--color-accent-2-700)" : "var(--color-text)", bg: on ? "var(--color-accent-2-200)" : "var(--color-neutral-100)", color: on ? "var(--color-accent-2-700)" : "var(--color-text)", pop: s.popId === id ? "rl-pop .4s ease" : "none" };
-    };
+    const unread = CATALOG.filter(i => !i.id.startsWith("b") && !s.seen[i.id]).length;
+
     return {
-        points: s.points, toast: s.toast,
-        headerSub: s.screen === "store" ? "show room" : s.screen === "donate" ? "pass on a piece" : s.screen === "tags" ? "my items" : s.screen === "messages" ? "community notes" : "community notes",
-        openSearch: () => self.setState({ search: true }),
-        closeSearch: () => self.setState({ search: false }),
+        nfc: createNfcModel(self), openNfc: id=>self.openNfc(id), storyNfc:()=>self.openNfc(mg.id), canDesignStory:canBindStory(s,mg.id),
+        dataError:s.dataError, retry:()=>self.refreshRecords(),
+        points: s.points, toast: s.toast, showroom: createShowroomModel(self),
+        headerSub: s.screen === "nfc" ? "your story tag" : s.screen === "store" ? "show room" : s.screen === "donate" ? "pass on a piece" : s.screen === "mytags" ? "my tags" : s.screen === "tags" ? "items" : s.screen === "messages" ? "community notes" : "community notes",
         openDialog: () => self.node("welcome"),
         closeDialog: () => { clearInterval(self.t); self.setState({ dialog: false }); },
-        isStore: s.screen === "store", isDonate: s.screen === "donate", isTags: s.screen === "tags", isMessages: s.screen === "messages", isBoard: s.screen === "board", isTagView: s.screen === "tag",
+        isStore: s.screen === "store", isDonate: s.screen === "donate", isTags: s.screen === "tags", isMyTags: s.screen === "mytags", isMessages: s.screen === "messages", isBoard: s.screen === "board", isTagView: s.screen === "tag",
         goStore: () => self.setState({ screen: "store" }), goTags: () => self.setState({ screen: "tags" }),
-        closeTagView: () => self.setState({ screen: "tags" }),
-        worldRef: el => { self.world = el; },
-        floorRef: el => { self.floor = el; },
-        dotRef: el => { self.dot = el; },
-        viewRef: el => { self.view = el; },
-        joyRef: el => { self.joyEl = el; },
-        knobRef: el => { self.knob = el; },
-        zoneJumps: [
-            { label: "Top voted", zone: "top" },
-            { label: "Booths", zone: "booths" },
-            { label: "New in", zone: "arrivals" }
-        ].map(z => ({ label: z.label, go: () => self.walkTo(SPOT[z.zone][0], SPOT[z.zone][1], SPOT[z.zone][2]) })),
-        walls: WALLS.map(w => ({ ref: el => { self.wallEls[w.id] = el; } })),
-        sprites: ITEMS.map(it => {
-            const g = it.kind === "garment" ? self.item(it.id) : null;
-            const b = it.kind === "booth" ? BOOTHS.filter(x => x.id === it.id)[0] : null;
-            const postCount = g ? self.postsFor(g.id).length : 0;
-            return {
-                ref: el => { self.els[it.id] = el; },
-                tap: it.kind === "sign" ? null : () => self.interact(it.id),
-                cursor: it.kind === "sign" ? "default" : "pointer",
-                isSign: it.kind === "sign", isBooth: it.kind === "booth",
-                isFigure: it.kind === "garment" || it.kind === "npc", isNpc: it.kind === "npc",
-                hasPosts: !!g,
-                postsLabel: postCount + " posts",
-                postTap: e => { if (e && e.stopPropagation)
-                    e.stopPropagation(); self.setState({ screen: "board", modal: null, boardGarment: g.id }); },
-                kicker: g ? g.designer + " · ♥ " + self.count(g.id) : it.kicker,
-                kickerColor: g ? "var(--color-accent-2-700)" : "var(--color-neutral-600)",
-                figure: g ? "mannequin" : it.figure,
-                name: g ? g.name : b ? b.designer : it.name,
-                sub: g ? g.designer + " · $" + g.price + " · ♥ " + self.count(g.id) : b ? b.bio : it.sub,
-                priceLabel: g ? "$" + g.price : "",
-                wip: b ? b.wip : "", progress: b ? b.progress : 0
-            };
-        }),
-        onDown: e => { self.drag = { x: e.clientX, yaw: self.cam.yaw }; },
-        onMove: e => { if (self.drag)
-            self.cam.yaw = self.drag.yaw + (e.clientX - self.drag.x) * -0.28; },
-        onUp: () => { self.drag = null; },
-        joyDown: e => {
-            e.stopPropagation();
-            self.joyActive = true;
-            if (e.currentTarget.setPointerCapture)
-                e.currentTarget.setPointerCapture(e.pointerId);
-            self.joyRect = e.currentTarget.getBoundingClientRect();
-        },
-        joyMove: e => {
-            e.stopPropagation();
-            if (!self.joyActive || !self.joyRect)
-                return;
-            const r = self.joyRect, cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-            let dx = e.clientX - cx, dy = e.clientY - cy;
-            const max = 34, d = Math.sqrt(dx * dx + dy * dy);
-            if (d > max) {
-                dx = dx / d * max;
-                dy = dy / d * max;
-            }
-            self.joy = { x: dx / max, y: dy / max };
-            if (self.knob)
-                self.knob.style.transform = "translate(" + dx + "px," + dy + "px)";
-        },
-        joyUp: e => {
-            if (e)
-                e.stopPropagation();
-            self.joyActive = false;
-            self.joy = { x: 0, y: 0 };
-            if (self.knob)
-                self.knob.style.transform = "translate(0,0)";
-        },
-        focusName: focusItem ? (focusG ? focusG.name : focusItem.kind === "booth" ? boothData.designer + "'s booth" : "Mei") : null,
-        focusKicker: focusItem ? (focusG ? focusG.designer + " · $" + focusG.price : focusItem.kind === "booth" ? "designer booth" : "floor host") : "",
-        focusIsGarment: !!focusG,
-        focusVotes: focusG ? self.count(focusG.id) : 0,
-        focusHeart: heart(focusG ? focusG.id : "none"),
-        focusStar: focusG && s.saved[focusG.id]
-            ? { border: "var(--color-accent-700)", bg: "var(--color-accent-200)", color: "var(--color-accent-800)", icon: "★" }
-            : { border: "var(--color-text)", bg: "var(--color-neutral-100)", color: "var(--color-text)", icon: "☆" },
-        cartLabel: focusG && s.cart.indexOf(focusG.id) >= 0 ? "In cart" : "＋\nCart",
-        cartBg: focusG && s.cart.indexOf(focusG.id) >= 0 ? "var(--color-accent-200)" : "var(--color-neutral-100)",
-        cartColor: "var(--color-text)",
-        focusOpen: () => { if (focusItem)
-            self.interact(focusItem.id); },
-        addToCart: () => { if (focusG)
-            self.addCart(focusG.id); },
-        voteFocus: () => { if (focusG)
-            self.vote(focusG.id); },
-        saveFocus: () => { if (focusG)
-            self.toggleSave(focusG.id); },
+        closeTagView: () => {if(s.shareId)self.setState({screen:s.shareReturn||"store",modal:s.shareId,shareId:null});else self.setState({screen:"tags"});},
         dialogOpen: s.dialog, typed: node.text.slice(0, s.typedLen), typing: s.typing, showChoices: !s.typing,
         skipTyping: () => { clearInterval(self.t); self.setState({ typedLen: node.text.length, typing: false }); },
         choices: node.choices.map(c => ({
@@ -127,29 +32,15 @@ export function createViewModel(self) {
                 if (c.to)
                     return self.node(c.to);
                 if (c.act === "goTop")
-                    return self.walkTo(SPOT.top[0], SPOT.top[1], SPOT.top[2]);
+                    return self.changeZone(2);
                 if (c.act === "goBooths")
-                    return self.walkTo(SPOT.booths[0], SPOT.booths[1], SPOT.booths[2]);
+                    return self.changeZone(0);
                 if (c.act === "goNew")
-                    return self.walkTo(SPOT.arrivals[0], SPOT.arrivals[1], SPOT.arrivals[2]);
+                    return self.changeZone(1);
                 if (c.act === "donate")
                     return self.setState({ dialog: false, screen: "donate", donateStep: 1, donateChat: "photo" });
                 self.setState({ dialog: false });
             }
-        })),
-        searchOpen: s.search, query: s.query, onQuery: e => self.setState({ query: e.target.value }),
-        catChips: ["All", "Denim", "Outerwear", "Tops", "Bags", "Skirts"].map(c => Object.assign({ label: c, pick: () => self.setState({ cat: c }) }, self.chip(s.cat === c))),
-        sortChips: ["Most voted", "Newest", "Price ↑"].map(c => Object.assign({ label: c, pick: () => self.setState({ sort: c }) }, self.chip(s.sort === c))),
-        priceChips: ["Any", "Under $60", "$60–100", "$100+"].map(c => Object.assign({ label: c, pick: () => self.setState({ price: c }) }, self.chip(s.price === c))),
-        resultCount: results.length + (results.length === 1 ? " piece" : " pieces"),
-        noResults: results.length === 0,
-        hasDesignerHits: designerHits.length > 0,
-        designerHits: designerHits.map(b => ({ name: b.designer, bio: b.bio, pieces: b.pieces.length, open: () => self.setState({ booth: b.id, search: false }) })),
-        results: results.map(g => ({
-            name: g.name, designer: g.designer, price: "$" + g.price, votes: self.count(g.id),
-            heart: heart(g.id),
-            cartLabel: s.cart.indexOf(g.id) >= 0 ? "In cart" : "＋\nCart",
-            open: () => self.openStory(g.id), cart: () => self.addCart(g.id), vote: () => self.vote(g.id)
         })),
         boothOpen: !!s.booth, closeBooth: () => self.setState({ booth: null }),
         booth: Object.assign({}, boothData, {
@@ -158,8 +49,8 @@ export function createViewModel(self) {
                 return { name: g.name, price: "$" + g.price, votes: self.count(id), posts: self.postsFor(id).length, open: () => self.openStory(id) };
             })
         }),
-        modalOpen: !!s.modal, story, closeModal: () => self.setState({ modal: null }),
-        shareStory: () => self.setState({ modal: null, screen: "tag" }),
+        modalOpen: !!self.item(s.modal), story, closeModal: () => self.setState({ modal: null }),
+        shareStory: () => self.setState({shareId:mg.id,shareReturn:s.screen,modal:null,screen:"tag"}),
         modalCartCta: s.cart.indexOf(mg.id) >= 0 ? "Reserved · $" + mg.price : "Reserve · $" + mg.price,
         modalCartBg: s.cart.indexOf(mg.id) >= 0 ? "var(--color-accent-700)" : "var(--color-text)",
         modalCart: () => self.addCart(mg.id),
@@ -180,15 +71,14 @@ export function createViewModel(self) {
         isReplying: !!s.replyTarget,
         replyTarget: s.replyTarget || "",
         clearReply: () => self.setState({ replyTarget: null }),
-        postMessage: () => {
-            const text = s.draft.trim();
-            if (!text && !s.attachment)
-                return;
-            self.setState(st => {
-                const posts = Object.assign({}, st.posts);
-                posts[boardGarment.id] = [{ author: "you", role: "community", when: "now", text: text || "Shared an image.", attachment: st.attachment, replyTo: st.replyTarget }].concat(posts[boardGarment.id] || []);
-                return { posts, draft: "", attachment: null, replyTarget: null, modal: null, boardGarment: null, screen: "messages", points: st.points + 10 };
-            }, () => self.toast("Posted to your threads +10 pts"));
+        postMessage: async () => {
+            const text=s.draft.trim()||(s.attachment?'Shared an image.':'');if(!text||s.saving)return;
+            const id=self.postRequestId||(self.postRequestId=crypto.randomUUID());
+            if(await self.persist({type:'post',id,value:{garmentId:boardGarment.id,text,replyTo:s.replyTarget,attachment:s.attachment}})) {
+                self.postRequestId=null;
+                self.setState({draft:'',attachment:null,replyTarget:null,modal:null,boardGarment:null,screen:'messages'});
+                self.toast('Posted to your threads');
+            }
         },
         donateStep: s.donateStep, onStep1: s.donateStep === 1, onStep2: s.donateStep === 2,
         donateBack: () => {
@@ -229,20 +119,26 @@ export function createViewModel(self) {
         step2Blocked: !(s.condition && s.size && s.drop),
         step2Bg: s.condition && s.size && s.drop ? "var(--color-text)" : "var(--color-neutral-500)",
         step2Cta: s.condition && s.size && s.drop ? "Create my Digital Garment Tag" : "Pick condition, size and drop-off",
-        finishDonate: () => {
-            if (!(s.condition && s.size && s.drop))
-                return;
-            const tag = { id: "#DN-" + crypto.randomUUID().slice(0, 8).toUpperCase(), name: "Old Denim Jacket", donor: "you", condition: s.condition.toLowerCase(), size: s.size, drop: s.drop, when: new Date().toLocaleString() };
-            self.setState(st => ({
-                newTag: tag, screen: "tag", tagSaved: false,
-                tags: [{ id: tag.id, name: tag.name, meta: tag.condition + " · size " + tag.size, status: "waiting for a maker", dot: "var(--color-accent-2)", boardLabel: "Open message board", firstMessage: "Note from the last wearer: " + tag.condition + " · size " + tag.size + (st.desc ? " · “" + st.desc + "”" : "") }].concat(st.tags)
-            }), () => self.award(40, "Tag created"));
+        finishDonate: async () => {
+            if(!(s.condition&&s.size&&s.drop)||s.saving)return;
+            const id=self.donationRequestId||(self.donationRequestId='dn-'+crypto.randomUUID());
+            if(await self.persist({type:'donation',id,value:{condition:s.condition,size:s.size,drop:s.drop,note:s.desc.trim()||'Ready for a new chapter.'}})) {
+                const tag=self.state.tags.find(t=>t.garmentId===id);
+                self.donationRequestId=null;
+                self.setState({newTag:tag,shareId:null,screen:'tag',condition:null,size:null,drop:null,desc:'',photos:false,donateStep:1,donateChat:'photo'});
+                self.toast('Tag created +40 pts');
+            }
         },
-        newTag: s.newTag || { id: "#PS-1180", name: "Patchwork Cargo Skirt", donor: "Priya", condition: "good", size: "S", drop: "UTS Grab-A-Fit point", when: "28 Aug 2026, 14:20" },
-        qr: self.qrEl(),
-        saveTagLabel: s.tagSaved ? "Save ✅" : "Save",
-        saveTag: () => self.toast("Demo tag — saving is not connected"),
-        tagsSummary: s.tags.length + " passed on · " + savedIds.length + " saved · " + s.points + " loom pts",
+        tag:s.shareId?self.item(s.shareId):s.newTag,
+        isShare:!!s.shareId,
+        tagUrl:storyUrl(s.shareId||s.newTag?.id,[...s.donations,...s.sharedGarments]),
+        openTagStory:()=>self.openStory(s.shareId||s.newTag?.id),
+        copyTagLink:async()=>{try{await navigator.clipboard.writeText(storyUrl(s.shareId||s.newTag?.id,[...s.donations,...s.sharedGarments]));self.toast('Story link copied');}catch{self.toast('Copy the story link shown above.');}},
+        tagsSummary: s.tags.length + " passed on · " + savedIds.length + " saved",
+        savedNfcTags: Object.values({...s.legacyDesigns,...s.nfcDesigns}).filter(d=>validateDesign(d,[...s.donations,...s.sharedGarments])).map(d=>({
+            ...d, name:self.item(d.garmentId).name, color:STRAP_COLORS.find(c=>c.id===d.color),
+            canEdit:canBindStory(s,d.garmentId), edit:()=>self.openNfc(d.garmentId), open:()=>self.openStory(d.garmentId)
+        })),
         itemTabs: [
             { key: "donated", label: "Donated (" + s.tags.length + ")" },
             { key: "favourites", label: "Favourites (" + savedIds.length + ")" },
@@ -256,7 +152,7 @@ export function createViewModel(self) {
         showDonated: s.itemsTab === "donated",
         showFavourites: s.itemsTab === "favourites",
         showCart: s.itemsTab === "cart",
-        myTags: s.tags.map(t => Object.assign({}, t, { open: () => self.openStory("g1") })),
+        myTags: s.tags.map(t => Object.assign({}, t, { open: () => self.openStory(t.garmentId) })),
         savedList: savedIds.map(id => {
             const g = self.item(id);
             return { name: g.name, designer: g.designer, price: "$" + g.price, votes: self.count(id), open: () => self.openStory(id), unsave: () => self.toggleSave(id) };
@@ -265,7 +161,7 @@ export function createViewModel(self) {
         messageCards: Object.keys(s.posts).reduce((all, id) => {
             const garment = self.item(id), mine = (s.posts[id] || []).filter(p => p.author === "you")[0];
             return mine ? all.concat([{ garment: garment ? garment.name : "Garment", text: mine.text, when: mine.when, open: () => self.setState({ screen: "board", boardGarment: id }) }]) : all;
-        }, []).concat(s.tags.map(t => ({ garment: t.name, text: t.firstMessage || ("Passed on · " + t.meta), when: "earlier", open: () => self.setState({ screen: "board", boardGarment: "g1" }) }))),
+        }, []).concat(s.tags.map(t => ({ garment: t.name, text: t.firstMessage || ("Passed on · " + t.meta), when: "earlier", open: () => self.setState({ screen: "board", boardGarment: t.garmentId }) }))),
         noMessageCards: !Object.keys(s.posts).some(id => (s.posts[id] || []).some(p => p.author === "you")) && !s.tags.length,
         cartList: cartItems.map(g => ({
             name: g.name, designer: g.designer, price: "$" + g.price,
@@ -279,11 +175,12 @@ export function createViewModel(self) {
         tabs: [
             { key: "store", icon: "◈", label: "Explore" },
             { key: "donate", icon: "📦", label: "Donate" },
-            { key: "tags", icon: "👔", label: "My items", badge: (unread + s.cart.length) ? String(unread + s.cart.length) : null },
-            { key: "messages", icon: "◇", label: "Threads" }
+            { key: "mytags", icon: "◇", label: "My tags" },
+            { key: "tags", icon: "👔", label: "Items", badge: (unread + s.cart.length) ? String(unread + s.cart.length) : null },
+            { key: "messages", icon: "☷", label: "Threads" }
         ].map(t => ({
             icon: t.icon, label: t.label, badge: t.badge || null,
-            pick: () => self.setState({ screen: t.key, search: false, modal: null, booth: null }),
+            pick: () => self.setState({ screen: t.key, modal: null, booth: null }),
             bg: s.screen === t.key ? "var(--color-text)" : "var(--color-neutral-100)",
             color: s.screen === t.key ? "var(--color-neutral-100)" : "var(--color-text)"
         }))

@@ -4,7 +4,7 @@ export default function MyItems({ model }) {
     return (<> {Boolean(isTags) && <> 
         <div className="rl-scroll myitems-1">
         <div>
-        <div className="myitems-2">{"My items"}</div>
+        <div className="myitems-2">{"Items"}</div>
         <div className="myitems-3">{tagsSummary}</div>
         </div>
         <div className="myitems-4">

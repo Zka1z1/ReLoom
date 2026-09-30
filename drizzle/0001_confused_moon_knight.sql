@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `reloom_donation_identity` ON `reloom_records` (`id`) WHERE "reloom_records"."kind" = 'donation';
