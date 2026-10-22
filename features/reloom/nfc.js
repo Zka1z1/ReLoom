@@ -25,7 +25,6 @@ export function participatingGarments(state) {
 }
 export function canBindStory(state,id) {return participatingGarments(state).some(g=>g.id===id);}
 
-export function storyUrl(id,donations=[]) {return findGarment(id,donations) ? `https://reloom-mobile.z1oey12.chatgpt.site/?story=${encodeURIComponent(id)}` : null;}
 export function createNfcModel(self) {
   const s=self.state,design=s.nfcDesign,garments=participatingGarments(s),canBind=canBindStory(s,design.garmentId);
   const change=patch=>self.setState({nfcDesign:{...design,...patch},nfcSaved:false,nfcError:''});
@@ -38,8 +37,8 @@ export function createNfcModel(self) {
   };
   return {isOpen:s.screen==='nfc',design,colors:STRAP_COLORS,palette:EMOJI_PALETTE,garments,canBind,
     garment:self.item(design.garmentId),saving:s.saving,color:STRAP_COLORS.find(c=>c.id===design.color),saved:s.nfcSaved,error:s.nfcError,
-    change,save,url:canBind?storyUrl(design.garmentId,[...s.donations,...s.sharedGarments]):null,
+    change,save,skip:()=>self.setState({screen:s.nfcReturn==='messages'?'messages':'mytags',modal:null}),
     selectGarment:id=>{if(!canBindStory(self.state,id))return;const saved=s.nfcDesigns[id]||s.legacyDesigns[id];if(saved)self.setState({nfcDesign:{...saved,emojis:[...saved.emojis]},nfcSaved:true,nfcError:''});else change({garmentId:id});},
-    preview:()=>{if(canBindStory(self.state,design.garmentId))self.openStory(design.garmentId);},close:()=>self.setState({screen:s.nfcReturn||'store'}),
+    close:()=>self.setState({screen:s.nfcReturn||'store'}),
   };
 }

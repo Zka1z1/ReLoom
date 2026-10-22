@@ -1,46 +1,55 @@
 # ReLoom
 
-A mobile-first, interactive clothing exchange **prototype**, built with React and Sites. The original visual design and showroom are preserved; HTML templates and browser-side prototype compilation have been removed.
+A mobile-first sustainable fashion community connecting donors, makers and each garment’s story.
 
-## Development
+Live site: https://reloom-mobile.z1oey12.chatgpt.site/
 
-Use the existing pnpm lockfile and Node 22.13 or newer.
+## Current experience
 
-- `pnpm install` — install dependencies under your organization's security policy.
-- `pnpm dev` — run the local site.
-- `pnpm test` — test rendering and the principal application flows without a browser.
-- `pnpm lint` — check source quality.
-- `pnpm build` — create the production build.
+- **Mei / Donate:** conversational donation with one photo, essential garment details, an optional memory and Public / Only me visibility.
+- **Explore:** designer booths, newly donated garments and upcycled pieces, with independent searches/filters, arrow navigation and swipe transitions.
+- **My tags:** optional colour and emoji customisation linked to a garment the visitor has participated in. Designs are saved on the server. Physical NFC programming is not implemented.
+- **Stories:** participated-in or followed garments, before/after timelines, invitations, photo/text chat and per-visitor unread badges. My includes the featured hoodie example without granting tag eligibility. Swipe left on story cards for Mark unread (red) and Mark read (blue).
+- **Claim:** opens an editable request in the garment’s chat. It does not reserve a garment or transfer ownership.
 
-## Structure
+## Architecture
 
-- `app/` owns routing, metadata, and the application entry point.
-- `features/reloom/components/` contains the individual screens and overlays.
-- `features/reloom/ReLoomApp.jsx` owns React state, persistence synchronization and lifecycle.
-- `features/reloom/view-model.js` derives screen properties and connects actions to state.
-- `features/reloom/domain.js` resolves catalogue and donated garment identities.
-- `features/reloom/records.js` projects stored participation and garment records into screen state.
-- `app/api/reloom/route.ts` validates writes and scopes personal records to an HttpOnly visitor cookie; `db/` and `drizzle/` own D1 access and migrations.
-- `features/reloom/data.js` contains clearly separated demonstration records.
-- `features/reloom/reloom.css` contains shared design tokens, deduplicated component styles and mobile layout rules. Inline styles are reserved for values that change with state.
-- `tests/` covers server-rendered screens, filtering, voting, saved items, cart, donations, threads and animation lifecycle.
+Vinext, React and TypeScript run on the Sites Workers runtime. D1 persists donation records, profiles, tag designs, invitations, messages and read cursors. R2 stores uploaded photos. Deployment bindings are declared in `.openai/hosting.json`; SQL migrations live in `drizzle/`.
 
-## Collaboration
+UI and domain modules are in `features/reloom/`, API handlers in `app/api/`, and shared server functions in `server/`.
 
-Keep changes small and work on separate branches. Run tests, lint and build before merging. Keep the existing `.openai/hosting.json` project ID: creating another Site is not necessary. Publish through Sites with an authorized editor; never commit source-write credentials or environment secrets.
+- `swipe-events.js` and `use-swipe-events.js` share native touch handling between story cards and Explore. Non-passive move/end listeners prevent iOS compatibility clicks after swiping. Vertical scrolling, keyboard controls and ordinary taps remain available.
+- `chat-timeline.js` serializes polling, writes, read receipts and history paging. It fills missing pages before publishing a refresh, preserves the last complete snapshot on failure, and ignores responses after unmounting.
+- `server/chat-summary.ts` supplies room-wide counts and latest messages separately from personal posts. Other people’s messages never create participation, rewards or tag permissions for the viewer. Private legacy notes stay private.
 
-## Prototype limitations
+## Local development and checks
 
-Donations, participation (votes and personal comments), points and NFC designs are persisted in Sites D1. Each mutation writes an individual record; votes, posts and donations are idempotent. Server-side checks restrict new NFC bindings to participated stories. Browser tabs refresh shared state without replacing an unsaved design. A random HttpOnly visitor cookie identifies this prototype's visitor; it is not an account or cross-device login. Clearing cookies or switching browser profiles loses access to that visitor's private records. Favourites and cart remain temporary React state.
+Use Node.js 22.13 or later and install the locked dependencies with `pnpm install --frozen-lockfile`. Start the local preview with `pnpm dev`.
 
-Old browser-only NFC designs are retained. Eligible designs migrate to D1 without overwriting newer server designs. Legacy designs with missing participation history remain visible locally until the visitor participates and saves them; migration never manufactures votes or comments.
+```sh
+node scripts/test.mjs
+node node_modules/typescript/bin/tsc --noEmit
+RELOOM_TEST_URL=http://localhost:3000 node --test tests/storage.integration.mjs
+```
 
-Donation stories have public, unguessable links, while personal designs and participation records remain visitor-scoped. Shared story responses omit owner identifiers. Comments are personal threads, not shared message delivery. There is no payment, real reservation, upload service or physical NFC programming. Donation photos and impact statistics remain illustrative. The old decorative QR was removed in favour of a working story link.
+The integration suite refuses non-local URLs and creates isolated local visitor records. It checks cross-visitor messages, photo access, private donations, invitations, ownership, unread cursors and room summaries. Do not run mutation tests against production.
 
-The refactor does not claim real-device browser verification. Automated rendering/logic checks are separate from visual, touch and accessibility testing on physical phones.
+If the local database needs migrations, build first and apply each pending SQL file once using:
 
-## Local storage validation
+```sh
+node node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file <migration.sql>
+```
 
-Generate schema migrations with `pnpm exec drizzle-kit generate`. After a build, apply each pending SQL file once to the local D1 database using `node node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file <migration.sql>`. Publishing applies production migrations separately. Keep applied migrations immutable.
+Keep applied migrations immutable. Sites handles production migration deployment separately. Generated builds, local data, credentials and test output are ignored by Git.
 
-With `pnpm dev` running, execute `RELOOM_TEST_URL=http://localhost:3000 node --test tests/storage.integration.mjs` (substitute the printed local port). These tests create isolated local visitors and cover concurrent saves, reloads, ownership, participation checks, public story links and CSRF rejection. They refuse non-local URLs.
+## Identity, privacy and prototype limits
+
+Identity is an unguessable HttpOnly visitor cookie, not a password-protected account. Renaming a profile does not sign into another visitor’s records. Different devices or browser profiles have separate identities. Only me donations and their photos/chat require the owning visitor cookie. Public donations are shared in Explore without granting others ownership.
+
+Chats poll every 2.5 seconds while visible. Read receipts acknowledge the displayed cursor; messages arriving later remain unread. Seeded introductory messages have their own read state; private legacy notes do not add unread badges. Basic rate limiting is present; staffed moderation is not.
+
+Photos are resized and re-encoded before upload. Optional server-only `OPENAI_API_KEY` and `OPENAI_VISION_MODEL` enable image suggestions (default model: `gpt-4.1-mini`). Without a configured key or when recognition fails, the interface uses editable manual details. Do not commit secrets or claim AI recognition has been verified without a configured successful call.
+
+Catalogue imagery and garment transformations labelled as concepts or illustrations are prototype artwork. The hoodie-to-tote image is an AI-generated concept, not proof of a completed physical transformation. Sample drop-off locations, impact figures and purchase controls do not represent verified services, environmental measurements or real payments.
+
+Automated touch-event tests and desktop browser dragging do not replace testing on a physical iPhone in Safari.

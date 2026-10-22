@@ -1,17 +1,4 @@
-import React from "react";
-export default function Header({ model }) {
-    const { headerSub, openDialog, openNfc } = model;
-    return (<> <div className="app-header">
-    <div className="header-title">
-    <div className="brand-name">{"ReLoom"}</div>
-    <div className="header-subtitle">{headerSub}</div>
-    </div>
-    <div className="header-actions">
-    <button className="header-6 header-diy" onClick={()=>openNfc()} aria-label={"DIY NFC strap"} type="button">{"NFC DIY"}</button>
-    <button className="header-7" onClick={openDialog} aria-label={"Talk to Mei"} type="button">
-    <span className="header-8">{"M"}<span className="header-9"></span></span>
-    <span className="header-10"></span>
-    </button>
-    </div>
-    </div> </>);
+import React from 'react';
+export default function Header({model}){
+ return <header className="app-header"><div className="header-title"><div className="brand-name">ReLoom<span className="brand-stitch" aria-hidden="true">✳</span></div><div className="header-subtitle">{model.headerSub}</div></div><button className="header-diy" onClick={model.startDonate} type="button">Start donating</button></header>;
 }

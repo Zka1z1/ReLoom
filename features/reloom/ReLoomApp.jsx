@@ -1,6 +1,5 @@
 "use client";
 import React from "react";
-import { NODES } from "./data.js";
 import { findGarment, voteCount, garmentPosts } from "./domain.js";
 import { createViewModel } from "./view-model.js";
 import { ZONES, EMPTY_FILTERS, DONATIONS } from "./showroom.js";
@@ -11,14 +10,16 @@ import AppView from "./components/AppView.jsx";
 export default class ReLoomApp extends React.Component {
     state = {
         nfcDesign: {...DEFAULT_DESIGN,emojis:[...DEFAULT_DESIGN.emojis]}, nfcDesigns:{}, legacyDesigns:{}, nfcSaved:false, nfcError:"", nfcReturn:"store", dataReady:false, dataError:"", saving:false, sharedGarments:[],
-        showroomZone: 0, showroomFilters: Object.fromEntries(ZONES.map(z => [z.id, {...EMPTY_FILTERS}])), donations: DONATIONS,
-        screen: "store", dialog: false, node: "welcome", typedLen: 0, typing: true,
-        points: 120, votes: {}, voted: {}, saved: {}, cart: [], toast: null,
+        showroomZone: 0, showroomFilters: Object.fromEntries(ZONES.map(z => [z.id, {...EMPTY_FILTERS}])), donations: DONATIONS, publicDonations:[],
+        screen: "welcome", guideReturn: "store", threadFilter:"all",boardTab:"story",boardReturn:"messages",
+        points: 120, followed:{}, votes: {}, voted: {}, saved: {}, cart: [], toast: null,
         modal: null, boardGarment: null, draft: "", attachment: null, replyTarget: null, posts: {}, seen: {}, booth: null,
-        donateStep: 1, donateChat: "photo", photos: false, condition: null, size: null, desc: "", drop: null,
-        tags: [SEED_TAG], newTag: null, shareId:null, itemsTab: "donated"
+        donationVisibility:'public',donateStep: 1, donateChat: "photo", photos: false, photo:null, photoBusy:false, photoError:"", garmentDetails:{name:"",cat:"",color:"",material:""}, condition: null, size: null, desc: "", drop: null,
+        tags: [SEED_TAG], newTag: null, shareId:null, itemsTab: "donated",
+        profile:null,receivedLetters:[],receivedLetter:null,chatUnread:{},chatSummary:{}
     };
     async componentDidMount() {
+        this.disposed=false;
         const initialize=async()=>{
             await this.refreshRecords();
             let legacy={};try{legacy=readDesigns(window.localStorage);}catch{}
@@ -29,15 +30,22 @@ export default class ReLoomApp extends React.Component {
             }
         };
         if(navigator.locks)await navigator.locks.request('reloom-initialize',initialize);else await initialize();
+        if(this.disposed)return;
         const storyId=new URLSearchParams(window.location.search).get('story');
-        if(storyId)await this.openStory(storyId);
-        this.onFocus=()=>this.refreshRecords();
+        if(storyId){this.setState({screen:"store"});await this.openStory(storyId);}
+        if(this.disposed)return;
+        this.onFocus=async()=>{
+            if(document.hidden||this.refreshing)return;
+            this.refreshing=true;
+            try{await this.refreshRecords();}finally{this.refreshing=false;}
+        };
         window.addEventListener('focus',this.onFocus);
+        document.addEventListener('visibilitychange',this.onFocus);
+        this.inboxTimer=setInterval(this.onFocus,5000);
         if(typeof BroadcastChannel!=='undefined'){
             this.channel=new BroadcastChannel('reloom-records');
             this.channel.onmessage=()=>this.refreshRecords();
         }
-        if (this.state.dialog) this.type();
     }
     cleanLegacy() {
         const remaining=Object.fromEntries(Object.entries(this.state.legacyDesigns).filter(([id])=>!this.state.nfcDesigns[id]));
@@ -47,8 +55,8 @@ export default class ReLoomApp extends React.Component {
     request=action=>requestRecords(action);
     enqueue(work) {const next=(this.pending||Promise.resolve()).then(work);this.pending=next.catch(()=>{});return next;}
     applyRecords(records) {
-        const {ownedDonations,sharedGarments=[],...data}=records;
-        return new Promise(resolve=>this.setState(s=>({...data,sharedGarments:[...new Map([...s.sharedGarments,...sharedGarments].map(g=>[g.id,g])).values()],donations:[...ownedDonations,...DONATIONS],dataReady:true,dataError:''}),resolve));
+        const {ownedDonations,publicDonations=[],sharedGarments=[],...data}=records;
+        return new Promise(resolve=>this.setState(s=>({...data,publicDonations,sharedGarments:[...new Map([...s.sharedGarments,...sharedGarments].map(g=>[g.id,g])).values()],donations:[...ownedDonations,...publicDonations,...DONATIONS],dataReady:true,dataError:''}),resolve));
     }
     refreshRecords() {
         return this.enqueue(async()=>{try{await this.applyRecords(await this.request());return true;}catch(error){this.setState({dataError:error.message});return false;}});
@@ -67,29 +75,30 @@ export default class ReLoomApp extends React.Component {
         const available=participatingGarments(this.state);
         const garmentId=id||(canBindStory(this.state,this.state.nfcDesign.garmentId)?this.state.nfcDesign.garmentId:available[0]?.id)||'';
         const saved=this.state.nfcDesigns[garmentId]||this.state.legacyDesigns[garmentId];
-        this.setState({screen:'nfc',modal:null,booth:null,dialog:false,
+        this.setState({screen:'nfc',modal:null,booth:null,
             nfcReturn:this.state.screen==='nfc'?this.state.nfcReturn:this.state.screen,
             nfcDesign:saved?{...saved,emojis:[...saved.emojis]}:{...DEFAULT_DESIGN,emojis:[...DEFAULT_DESIGN.emojis],garmentId},nfcSaved:!!saved,nfcError:''});
     }
-    componentWillUnmount() { clearInterval(this.t); clearTimeout(this.tt); window.removeEventListener('focus',this.onFocus); this.channel?.close(); }
+    componentWillUnmount() { this.disposed=true; clearTimeout(this.tt); clearInterval(this.inboxTimer); window.removeEventListener('focus',this.onFocus); document.removeEventListener('visibilitychange',this.onFocus); this.channel?.close(); }
     changeZone(index) {
         if (index < 0 || index >= ZONES.length) return;
-        this.setState({showroomZone: index, screen: 'store', dialog: false});
+        this.setState({showroomZone: index, screen: 'store'});
     }
     toast(msg) { clearTimeout(this.tt); this.setState({ toast: msg }); this.tt = setTimeout(() => this.setState({ toast: null }), 1700); }
-    type() {
-        clearInterval(this.t);
-        const full = NODES[this.state.node].text.length;
-        this.setState({ typedLen: 0, typing: true });
-        this.t = setInterval(() => this.setState(s => {
-            if (s.typedLen >= full) {
-                clearInterval(this.t);
-                return { typing: false };
-            }
-            return { typedLen: s.typedLen + 2 };
-        }), 16);
+    chooseIntent(id) {
+        if(id==='donate')return this.setState({screen:'donate',modal:null,booth:null});
+        const zone={designers:0,donated:1,upcycled:2}[id];
+        if(zone===undefined)return;
+        this.setState(s=>({screen:'store',showroomZone:zone,modal:null,booth:null,
+            showroomFilters:{...s.showroomFilters,[ZONES[zone].id]:{...EMPTY_FILTERS}}}));
     }
-    node(id) { this.setState({ dialog: true, node: id }, () => this.type()); }
+    openShare(id,returnScreen=this.state.screen) {
+        if(this.item(id)?.visibility==='private')return this.toast('Only you can view this story.');
+        this.setState({shareId:id,shareReturn:returnScreen,shareReturnModal:this.state.modal,receivedLetter:null,modal:null,screen:'tag'});
+    }
+    closeShare() {
+        this.setState({screen:this.state.receivedLetter?'messages':this.state.shareReturn||'messages',modal:this.state.receivedLetter?null:this.state.shareReturnModal||null,shareId:null,receivedLetter:null});
+    }
     item(id) { return findGarment(id,[...this.state.donations,...this.state.sharedGarments]); }
     count(id) { return voteCount(id, this.state.votes); }
     postsFor(id) { return garmentPosts(id, this.state.posts); }
@@ -107,7 +116,7 @@ export default class ReLoomApp extends React.Component {
             }
             saved[id] = true;
             return { saved };
-        }, () => this.toast(this.state.saved[id] ? "Saved to Items" : "Removed from Items"));
+        }, () => this.toast(this.state.saved[id] ? "Saved" : "Removed from saved"));
     }
     addCart(id) {
         if (!findGarment(id))
@@ -115,6 +124,21 @@ export default class ReLoomApp extends React.Component {
         if (this.state.cart.includes(id))
             return this.toast("Already in cart");
         this.setState(s => ({ cart: [...s.cart, id] }), () => this.toast("Added to cart"));
+    }
+    async openInvitationDestination(id,chat=false) {
+        const receipt=this.state.receivedLetter;
+        if(!receipt||receipt.garment.id!==id)return;
+        try {
+            const garment=this.item(id)||await loadSharedGarment(id);
+            // A slow request must not reopen an invitation the user has closed.
+            if(this.state.receivedLetter?.id!==receipt.id)return;
+            this.setState(s=>({
+                sharedGarments:[...s.sharedGarments.filter(g=>g.id!==id),garment],
+                screen:chat?'board':'messages',threadFilter:'friends',receivedLetter:null,shareId:null,booth:null,
+                ...(chat?{modal:null,boardGarment:id,boardTab:'notes',boardReturn:'messages',draft:'',attachment:null,replyTarget:null}
+                    :{modal:id,seen:{...s.seen,[id]:true}})
+            }));
+        }catch(error){this.toast(error.message);}
     }
     async openStory(id) {
         if(!this.item(id)) {

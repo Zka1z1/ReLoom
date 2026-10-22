@@ -11,10 +11,8 @@ export const EMPTY_FILTERS = { query: '', category: ALL, condition: ALL, size: A
 export const DONATIONS = [
   { id: 'don-denim', name: 'Faded Denim Jacket', cat: 'Denim', material: 'Cotton denim', condition: 'Good', size: 'M', donor: 'Priya', note: 'Worn cuffs, with plenty of strong fabric left to work with.', drop: 'UTS Grab-A-Fit point', when: 'Today' },
   { id: 'don-shirt', name: 'Striped Cotton Shirt', cat: 'Tops', material: 'Cotton', condition: 'Like new', size: 'L', donor: 'Tomas', note: 'Soft cotton with all buttons intact.', drop: 'Chippendale repair night', when: 'Today' },
-  { id: 'don-knit', name: 'Wool Cardigan', cat: 'Knitwear', material: 'Wool blend', condition: 'Fair', size: 'S', donor: 'Sam', note: 'A small hole near the hem; the yarn could be reused.', drop: 'Vinnies Glebe', when: 'Yesterday' },
-  { id: 'don-skirt', name: 'Pleated Midi Skirt', cat: 'Skirts', material: 'Cotton blend', condition: 'Good', size: 'M', donor: 'Jess', note: 'A loose waistband seam needs a little attention.', drop: 'UTS Grab-A-Fit point', when: 'Yesterday' },
 ];
-const SPECIALTIES = { 'bo-alex': 'Denim', 'bo-nao': 'Accessories', 'bo-rue': 'Tailoring' };
+const SPECIALTIES = { 'bo-alex': 'Accessories', 'bo-nao': 'Denim', 'bo-rue': 'Tailoring' };
 export const FILTER_GROUPS = {
   designers: [{ key: 'category', label: 'Specialty', options: [ALL, 'Denim', 'Accessories', 'Tailoring'] }],
   donated: [
@@ -58,6 +56,12 @@ export function createShowroomModel(self) {
   const items = selectZoneItems(zone.id, filters, self.state.donations, self.state.votes).map(item => ({
     ...item,
     open: () => zone.id === 'designers' ? self.setState({booth: item.id}) : self.openStory(item.id),
+    ownDonation:item.donor==='you',
+    claimDisabled:!self.state.dataReady||item.donor==='you'||item.visibility==='private',
+    claim:()=>{
+      if(!self.state.dataReady||item.donor==='you'||item.visibility==='private')return;
+      self.setState({screen:'board',modal:null,boardGarment:item.id,boardReturn:'store',boardTab:'notes',draft:'Hi! I’d like to upcycle this piece. Is it available to claim?',attachment:null,replyTarget:null});
+    },
     vote: () => self.vote(item.id), votes: self.count(item.id), voted: !!self.state.voted[item.id],
     save: () => self.toggleSave(item.id), saved: !!self.state.saved[item.id],
     addCart: () => self.addCart(item.id), inCart: self.state.cart.includes(item.id),

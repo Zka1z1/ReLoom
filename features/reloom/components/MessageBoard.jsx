@@ -1,30 +1,22 @@
-import React from "react";
-export default function MessageBoard({ model }) {
-    const { attachmentName, boardDesigner, boardPosts, boardTitle, chooseImage, clearAttachment, clearReply, closeBoard, draft, hasAttachment, imageUploadRef, isBoard, isReplying, onDraft, pickImage, postMessage, replyTarget } = model;
-    return (<> {Boolean(isBoard) && <> 
-        <div className="messageboard-1">
-        <div className="messageboard-2">
-        <button className="messageboard-3" onClick={closeBoard} type="button">{"\u2190"}</button>
-        <div className="header-title"><div className="messageboard-4">{boardTitle}</div><div className="messageboard-5">{String(boardDesigner) + " \u00b7 Message Board"}</div></div>
-        </div>
-        <div className="rl-scroll messageboard-6">
-            {boardPosts.map((p, index14) => <React.Fragment key={p.id ?? p.label ?? p.name ?? index14}>
-            <div className="messageboard-7">
-            <div className="rl-x messageboard-8" style={{ "border": "1.5px solid " + String(p.ring) }}></div>
-            <div className="donation-40"><div className="messageboard-9"><span className="messageboard-10">{p.author}</span><span className="messageboard-11">{String(p.role) + " \u00b7 " + String(p.when)}</span></div>{Boolean(p.hasReplyTo) && <> <div className="messageboard-12">{"Replying to " + String(p.replyTo)}</div> </>}<div className="messageboard-13">{p.text}</div>{Boolean(p.hasAttachment) && <> <div className="messageboard-14"><span>{"Image"}</span><span className="messageboard-15">{p.attachmentName}</span></div> </>}<button className="messageboard-16" onClick={p.reply} type="button">{"Reply"}</button></div>
-            </div>
-            </React.Fragment>)}
-        </div>
-        <div className="messageboard-17">
-        {Boolean(isReplying) && <> <div className="messageboard-18"><span>{"Replying to " + String(replyTarget)}</span><button className="messageboard-19" onClick={clearReply} aria-label={"Cancel reply"} type="button">{"\u00d7"}</button></div> </>}
-        {Boolean(hasAttachment) && <> <div className="messageboard-20"><span>{"Image"}</span><span className="messageboard-15">{attachmentName}</span><button className="messageboard-19" onClick={clearAttachment} aria-label={"Remove attachment"} type="button">{"\u00d7"}</button></div> </>}
-        <div className="messageboard-21">
-        <input className="messageboard-22" value={draft} onChange={onDraft} placeholder={"Add to the thread\u2026"}/>
-        <button className="messageboard-23" onClick={chooseImage} aria-label={"Attach image"} type="button">{"\u2795"}</button>
-        <button className="messageboard-24" onClick={postMessage} type="button">{"Post"}</button>
-        </div>
-        <input className="messageboard-25" ref={imageUploadRef} type={"file"} accept={"image/*"} onChange={pickImage}/>
-        </div>
-        </div>
- </>} </>);
+import React,{useEffect,useState} from 'react';
+import StoryJourney from './StoryJourney.jsx';
+import Icon from './Icon.jsx';
+import ChatRoom from './ChatRoom.jsx';
+import {chatRequest} from '../chat.js';
+export default function MessageBoard({model:m}){
+ const [unread,setUnread]=useState(0),room=m.isBoard?m.chatRoom:null;
+ const onUnread=count=>{setUnread(count);m.onChatUnread(count);};
+ useEffect(()=>{setUnread(0);},[room]);
+ useEffect(()=>{
+  if(!room||m.boardTab==='notes')return;
+  let cancelled=false,busy=false;
+  const refresh=async()=>{if(document.hidden||busy)return;busy=true;try{const data=await chatRequest(room);if(!cancelled)onUnread(data.unread);}catch{}finally{busy=false;}};
+  refresh();const timer=setInterval(refresh,3000);document.addEventListener('visibilitychange',refresh);
+  return()=>{cancelled=true;clearInterval(timer);document.removeEventListener('visibilitychange',refresh);};
+ },[room,m.boardTab]);
+ if(!m.isBoard)return null;
+ return <section className="thread-detail"><header className="detail-toolbar"><button type="button" className="icon-button" aria-label="Back to stories" onClick={m.closeBoard}><Icon name="back"/></button><div><strong>{m.boardTitle}</strong><span>The story continues</span></div></header>
+ <div className="segmented" aria-label="Story view"><button type="button" aria-pressed={m.boardTab==='story'} onClick={()=>m.setBoardTab('story')}>Story</button><button type="button" aria-pressed={m.boardTab==='notes'} onClick={()=>m.setBoardTab('notes')}>Chat room{unread>0&&<span className="chat-unread" aria-label={`${unread} unread messages`}>{unread>99?'99+':unread}</span>}</button></div>
+ {m.boardTab==='story'?<div className="rl-scroll thread-detail-scroll"><StoryJourney story={m.boardStory}/><button type="button" className="primary-button journey-join" onClick={m.boardShare}>Invite</button></div>:<ChatRoom key={m.chatRoom} room={m.chatRoom} onActivity={m.onChatActivity} onUnread={onUnread} privateNotes={m.boardPrivateNotes} initialDraft={m.chatDraft} username={m.profile?.displayHandle||m.profile?.handle||'you'}/>}
+ </section>;
 }

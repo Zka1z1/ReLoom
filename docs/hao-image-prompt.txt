@@ -1,0 +1,6 @@
+Generation mode: built-in image_gen tool.
+Before: public/assets/hao-hoodie-before.jpg (user-supplied original).
+After: public/assets/hao-tote-after.png (AI-generated design concept).
+
+Final prompt:
+Create a realistic premium product photograph, portrait aspect ratio, of an upcycled tote bag designed from the EXACT washed charcoal grey zip hoodie in the reference photo. This is the AFTER design concept for sustainable designer Hao. Recognizably preserve the reference's faded charcoal cotton fleece texture, its two split kangaroo pocket panels on the front, original silver metal zipper repurposed as a closed vertical decorative/functional front seam, ribbed hem as the tote's bottom band. The original sleeves become two broad sturdy shoulder handles, box-shaped roomy tote body, beautifully deliberate visible stitching, refined functional believable construction, subtle cream pillowcase fabric lining visible inside opening. No hoodie hood, no sleeves hanging loose. Show the whole finished bag upright three-quarter front view on warm off-white studio plinth with soft natural daylight, neutral pale background, editorial sustainable fashion photography, high texture detail, no text, no logo, no collage, no people. Keep the fabric clearly grey rather than black. Produce one standalone after image.

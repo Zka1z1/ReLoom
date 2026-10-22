@@ -1,0 +1,1 @@
+ALTER TABLE `reloom_letters` ADD `deleted` integer DEFAULT 0 NOT NULL;

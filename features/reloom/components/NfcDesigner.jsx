@@ -50,9 +50,9 @@ export default function NfcDesigner({model}) {
     <div ref={trash} className={`nfc-drop-remove nfc-remove-tile ${drag?.target==='remove'?'is-over':''}`} aria-label="Drag here to remove"><span aria-hidden="true">⌫</span><span>Remove</span></div></div>
     <span className="sr-only" role="status">{notice}</span>
    </div>
-   <section className="nfc-controls nfc-story-link"><label htmlFor="nfc-garment">Your stories</label><select id="nfc-garment" disabled={!n.garments.length} value={n.canBind?n.design.garmentId:''} onChange={e=>n.selectGarment(e.target.value)}>{!n.canBind&&<option value="">{n.garments.length?'Choose your story':'No stories yet'}</option>}{n.garments.map(g=><option value={g.id} key={g.id}>{g.name} · {g.designer}</option>)}</select><p className="nfc-story-eligibility">{n.garments.length?'Only garments you have participated in.':'Donate, vote or join a garment’s conversation first.'}</p><button type="button" className="nfc-preview-story" disabled={!n.canBind} onClick={n.preview}>Preview a tap ↗</button></section>
+   <section className="nfc-controls nfc-story-link"><label htmlFor="nfc-garment">Your stories</label><select id="nfc-garment" disabled={!n.garments.length} value={n.canBind?n.design.garmentId:''} onChange={e=>n.selectGarment(e.target.value)}>{!n.canBind&&<option value="">{n.garments.length?'Choose your story':'No stories yet'}</option>}{n.garments.map(g=><option value={g.id} key={g.id}>{g.name}{g.designer?` · ${g.designer}`:" · Your donation"}</option>)}</select></section>
   </div>
-  <footer className="nfc-save-bar">{n.error&&<div role="alert">{n.error}</div>}<button type="button" disabled={!n.canBind||n.saving} onClick={n.save}>{n.saving?'Saving…':n.saved?'Save changes':'Save design'}</button></footer>
+  <footer className="nfc-save-bar">{n.error&&<div role="alert">{n.error}</div>}<button type="button" disabled={!n.canBind||n.saving} onClick={n.save}>{n.saving?'Saving…':n.saved?'Save changes':'Save design'}</button><button type="button" className="nfc-skip" onClick={n.skip} disabled={n.saving}>Skip</button></footer>
   {drag&&!drag.keyboard&&<span className="nfc-drag-ghost" aria-hidden="true" style={{left:drag.x,top:drag.y}}>{drag.emoji||n.design.emojis[drag.index]}</span>}
  </section>;
 }

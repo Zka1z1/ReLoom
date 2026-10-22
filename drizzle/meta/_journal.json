@@ -15,6 +15,48 @@
       "when": 1790733117240,
       "tag": "0001_confused_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791687526517,
+      "tag": "0002_curious_baron_zemo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791690255980,
+      "tag": "0003_thankful_professor_monster",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791949011604,
+      "tag": "0004_true_loa",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791950613383,
+      "tag": "0005_robust_cloak",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791978230077,
+      "tag": "0006_silly_garia",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791987187058,
+      "tag": "0007_chat_photos",
+      "breakpoints": true
     }
   ]
 }

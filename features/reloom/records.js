@@ -4,10 +4,11 @@ export function donationTag(d) {
   return {...d,garmentId:d.id,meta:`${d.condition.toLowerCase()} · size ${d.size}`,status:'waiting for a maker',dot:'var(--color-accent-2)',boardLabel:'Open message board',firstMessage:`Note from the last wearer: ${d.note}`};
 }
 export function projectRecords(rows) {
-  /** @type {{nfcDesigns:Record<string,any>,voted:Record<string,boolean>,votes:Record<string,number>,posts:Record<string,any[]>,ownedDonations:any[],tags:any[],points:number}} */
-  const state={nfcDesigns:{},voted:{},votes:{},posts:{},ownedDonations:[],tags:[SEED_TAG],points:120};
+  /** @type {{followed:Record<string,boolean>,nfcDesigns:Record<string,any>,voted:Record<string,boolean>,votes:Record<string,number>,posts:Record<string,any[]>,ownedDonations:any[],tags:any[],points:number}} */
+  const state={followed:{},nfcDesigns:{},voted:{},votes:{},posts:{},ownedDonations:[],tags:[SEED_TAG],points:120};
   for(const {kind,id,data} of rows) {
     const value=typeof data==='string'?JSON.parse(data):data;
+    if(kind==='follow'&&value.active)state.followed[id]=true;
     if(kind==='design')state.nfcDesigns[id]=value;
     if(kind==='vote'){state.voted[id]=true;state.votes[id]=1;state.points+=5;}
     if(kind==='donation'){state.ownedDonations.push(value);state.tags.push(donationTag(value));state.points+=40;}
